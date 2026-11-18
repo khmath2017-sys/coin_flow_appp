@@ -11,9 +11,7 @@ class CurrencyRatesBar extends StatefulWidget {
 
 class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
   double? usdRate;
-  double? usdPrev;
   double? eurRate;
-  double? eurPrev;
   bool isLoading = true;
   bool hasError = false;
 
@@ -30,25 +28,26 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
     });
 
     try {
-      final response = await http.get(
-        Uri.parse('https://cbr-xml-daily.ru'),
-      );
+      // الاتصال بمصدر البنك المركزي الروسي الرسمي أو المرآة الاحتياطية
+      final response = await http
+          .get(Uri.parse('https://cbr.ru'))
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
-        final data = json.decode(utf8.decode(response.bodyBytes));
-        setState(() {
-          usdRate = (data['Valute']['USD']['Value'] as num).toDouble();
-          usdPrev = (data['Valute']['USD']['Previous'] as num).toDouble();
-          eurRate = (data['Valute']['EUR']['Value'] as num).toDouble();
-          eurPrev = (data['Valute']['EUR']['Previous'] as num).toDouble();
-          isLoading = false;
-        });
-      } else {
-        setState(() {
-          hasError = true;
-          isLoading = false;
-        });
+        final body = latin1.decode(response.bodyBytes);
+        final usdMatch = RegExp(r'R01235.*?<Value>(.*?)</Value>', dotAll: true).firstMatch(body);
+        final eurMatch = RegExp(r'R01239.*?<Value>(.*?)</Value>', dotAll: true).firstMatch(body);
+
+        if (usdMatch != null && eurMatch != null) {
+          setState(() {
+            usdRate = double.parse(usdMatch.group(1)!.replaceAll(',', '.'));
+            eurRate = double.parse(eurMatch.group(1)!.replaceAll(',', '.'));
+            isLoading = false;
+          });
+          return;
+        }
       }
+      throw Exception('Failed');
     } catch (e) {
       setState(() {
         hasError = true;
@@ -147,16 +146,16 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Ошибка загрузки курса ЦБ РФ', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                      const Text('Нет связи с ЦБ РФ (нажмите ↻)', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
                       IconButton(icon: const Icon(Icons.refresh, size: 18), onPressed: fetchCbrRates, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                     ],
                   )
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildRateItem('USD', usdRate!, usdPrev!),
+                      _buildRateItem('USD ЦБ', usdRate!),
                       Container(width: 1, height: 26, color: Colors.grey.shade300),
-                      _buildRateItem('EUR', eurRate!, eurPrev!),
+                      _buildRateItem('EUR ЦБ', eurRate!),
                       Container(width: 1, height: 26, color: Colors.grey.shade300),
                       const Icon(Icons.calculate_outlined, color: Colors.teal, size: 22),
                     ],
@@ -165,13 +164,11 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
     );
   }
 
-  Widget _buildRateItem(String title, double current, double previous) {
-    final isUp = (current - previous) >= 0;
+  Widget _buildRateItem(String title, double current) {
     return Row(
       children: [
         Text('$title: ', style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
-        Text('${current.toStringAsFixed(2)} ₽', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-        Icon(isUp ? Icons.arrow_drop_up : Icons.arrow_drop_down, color: isUp ? Colors.red : Colors.green, size: 18),
+        Text('${current.toStringAsFixed(2)} ₽', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
       ],
     );
   }
