@@ -1,6 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 class CurrencyRatesBar extends StatefulWidget {
   const CurrencyRatesBar({super.key});
@@ -13,7 +13,7 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
   double? usdRate;
   double? eurRate;
   bool isLoading = true;
-  bool hasError = false;
+  String errorText = '';
 
   @override
   void initState() {
@@ -21,76 +21,53 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
     fetchCbrRates();
   }
 
+  Future<String> _getUrl(String url) async {
+    final client = HttpClient()
+      ..badCertificateCallback = (cert, host, port) => true
+      ..connectionTimeout = const Duration(seconds: 7);
+    final req = await client.getUrl(Uri.parse(url));
+    req.headers.set('User-Agent', 'Mozilla/5.0');
+    final res = await req.close();
+    final bytes = await res.fold<List<int>>([], (p, e) => p..addAll(e));
+    client.close();
+    if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
   Future<void> fetchCbrRates() async {
     setState(() {
       isLoading = true;
-      hasError = false;
+      errorText = '';
     });
 
-    final headers = {'User-Agent': 'Mozilla/5.0 (Android 14; Mobile)'};
-
-    // المحاولة 1: المرآة السريعة للبنك المركزي الروسي
     try {
-      final res = await http
-          .get(Uri.parse('https://cbr-xml-daily.ru'), headers: headers)
-          .timeout(const Duration(seconds: 6));
-
-      if (res.statusCode == 200) {
-        final data = json.decode(utf8.decode(res.bodyBytes));
+      final body = await _getUrl('https://cbr-xml-daily.ru');
+      final data = json.decode(body);
+      setState(() {
+        usdRate = (data['Valute']['USD']['Value'] as num).toDouble();
+        eurRate = (data['Valute']['EUR']['Value'] as num).toDouble();
+        isLoading = false;
+      });
+      return;
+    } catch (e1) {
+      try {
+        final body2 = await _getUrl('https://er-api.com');
+        final data2 = json.decode(body2);
+        final rub = (data2['rates']['RUB'] as num).toDouble();
+        final eur = (data2['rates']['EUR'] as num).toDouble();
         setState(() {
-          usdRate = (data['Valute']['USD']['Value'] as num).toDouble();
-          eurRate = (data['Valute']['EUR']['Value'] as num).toDouble();
+          usdRate = rub;
+          eurRate = rub / eur;
           isLoading = false;
         });
         return;
-      }
-    } catch (_) {}
-
-    // المحاولة 2: الموقع الرسمي للبنك المركزي الروسي
-    try {
-      final res2 = await http
-          .get(Uri.parse('https://cbr.ru'), headers: headers)
-          .timeout(const Duration(seconds: 6));
-
-      if (res2.statusCode == 200) {
-        final body = latin1.decode(res2.bodyBytes);
-        final usdMatch = RegExp(r'R01235.*?<Value>(.*?)</Value>', dotAll: true).firstMatch(body);
-        final eurMatch = RegExp(r'R01239.*?<Value>(.*?)</Value>', dotAll: true).firstMatch(body);
-
-        if (usdMatch != null && eurMatch != null) {
-          setState(() {
-            usdRate = double.parse(usdMatch.group(1)!.replaceAll(',', '.'));
-            eurRate = double.parse(eurMatch.group(1)!.replaceAll(',', '.'));
-            isLoading = false;
-          });
-          return;
-        }
-      }
-    } catch (_) {}
-
-    // المحاولة 3: مصدر عالمي احتياطي مضمون
-    try {
-      final res3 = await http
-          .get(Uri.parse('https://er-api.com'), headers: headers)
-          .timeout(const Duration(seconds: 6));
-
-      if (res3.statusCode == 200) {
-        final data = json.decode(res3.body);
-        final rubPerUsd = (data['rates']['RUB'] as num).toDouble();
-        final eurPerUsd = (data['rates']['EUR'] as num).toDouble();
+      } catch (e2) {
         setState(() {
-          usdRate = rubPerUsd;
-          eurRate = rubPerUsd / eurPerUsd;
+          errorText = e1.toString().replaceAll('Exception:', '').trim();
           isLoading = false;
         });
-        return;
       }
-    } catch (_) {}
-
-    setState(() {
-      hasError = true;
-      isLoading = false;
-    });
+    }
   }
   void _showCalculatorDialog() {
     if (usdRate == null || eurRate == null) return;
@@ -153,10 +130,7 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
                 ],
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Закрыть'),
-                ),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Закрыть')),
               ],
             );
           },
@@ -179,11 +153,17 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
         ),
         child: isLoading
             ? const Center(child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-            : hasError
+            : errorText.isNotEmpty
                 ? Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Нет связи с ЦБ РФ (нажмите ↻)', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                      Expanded(
+                        child: Text(
+                          errorText,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, color: Colors.redAccent),
+                        ),
+                      ),
                       IconButton(icon: const Icon(Icons.refresh, size: 18), onPressed: fetchCbrRates, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                     ],
                   )
