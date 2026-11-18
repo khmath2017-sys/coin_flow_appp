@@ -180,6 +180,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       },
     );
   }
+  String _getShortRussianDate() {
+    final now = DateTime.now();
+    const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -196,13 +203,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
     );
   }
-  String _getShortRussianDate() {
-    final now = DateTime.now();
-    const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-    const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
-    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
-  }
 
+  Widget _buildHomeTab() {
+    double totalSpent = categories.fold(0, (sum, item) => sum + item.spent);
+
+    return Scaffold(
+      backgroundColor: Colors.grey.shade100,
+      appBar: AppBar(
         title: Column(
           children: [
             const Text('Умный Бюджет', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
@@ -212,13 +219,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
           ],
         ),
-
-    double totalSpent = categories.fold(0, (sum, item) => sum + item.spent);
-
-    return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      appBar: AppBar(
-        title: const Text('Умный Бюджет', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
