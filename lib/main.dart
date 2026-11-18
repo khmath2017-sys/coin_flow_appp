@@ -196,8 +196,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
     );
   }
+  String _getShortRussianDate() {
+    final now = DateTime.now();
+    const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
+  }
 
-  Widget _buildHomeTab() {
+        title: Column(
+          children: [
+            const Text('Умный Бюджет', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(
+              _getShortRussianDate(),
+              style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.normal),
+            ),
+          ],
+        ),
+
     double totalSpent = categories.fold(0, (sum, item) => sum + item.spent);
 
     return Scaffold(
