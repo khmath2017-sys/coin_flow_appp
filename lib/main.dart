@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 import 'widgets.dart';
+import 'currency_bar.dart';
+import 'stats_screen.dart';
 
 void main() {
   runApp(const CoinTrackerApp());
@@ -14,229 +18,308 @@ class CoinTrackerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'CoinFlow',
+      title: 'CoinFlow RU',
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.teal,
         brightness: Brightness.light,
       ),
-      home: const HomeScreen(),
+      home: const MainNavigationScreen(),
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class MainNavigationScreen extends StatefulWidget {
+  const MainNavigationScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  final List<Wallet> wallets = [
-    Wallet(id: 'w1', name: 'كاش', icon: Icons.payments, color: Colors.green, balance: 1500.0),
-    Wallet(id: 'w2', name: 'البطاقة', icon: Icons.credit_card, color: Colors.blue, balance: 4200.0),
-    Wallet(id: 'w3', name: 'مدخرات', icon: Icons.savings, color: Colors.orange, balance: 8000.0),
+class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  int _selectedIndex = 0;
+
+  List<Wallet> wallets = [
+    Wallet(id: 'w1', name: 'Наличные', iconCode: Icons.payments.codePoint, colorValue: Colors.green.value, balance: 15000.0),
+    Wallet(id: 'w2', name: 'Карта', iconCode: Icons.credit_card.codePoint, colorValue: Colors.blue.value, balance: 45000.0),
+    Wallet(id: 'w3', name: 'Копилка', iconCode: Icons.savings.codePoint, colorValue: Colors.orange.value, balance: 80000.0),
   ];
 
-  final List<ExpenseCategory> categories = [
-    ExpenseCategory(id: 'c1', name: 'طعام', icon: Icons.restaurant, color: Colors.redAccent),
-    ExpenseCategory(id: 'c2', name: 'مواصلات', icon: Icons.directions_car, color: Colors.indigo),
-    ExpenseCategory(id: 'c3', name: 'تسوق', icon: Icons.shopping_bag, color: Colors.purple),
-    ExpenseCategory(id: 'c4', name: 'فواتير', icon: Icons.receipt_long, color: Colors.teal),
-    ExpenseCategory(id: 'c5', name: 'قهوة', icon: Icons.local_cafe, color: Colors.brown),
-    ExpenseCategory(id: 'c6', name: 'ترفيه', icon: Icons.movie, color: Colors.pink),
+  List<ExpenseCategory> categories = [
+    ExpenseCategory(id: 'c1', name: 'Еда', iconCode: Icons.restaurant.codePoint, colorValue: Colors.redAccent.value),
+    ExpenseCategory(id: 'c2', name: 'Транспорт', iconCode: Icons.directions_car.codePoint, colorValue: Colors.indigo.value),
+    ExpenseCategory(id: 'c3', name: 'Покупки', iconCode: Icons.shopping_bag.codePoint, colorValue: Colors.purple.value),
+    ExpenseCategory(id: 'c4', name: 'Счета', iconCode: Icons.receipt_long.codePoint, colorValue: Colors.teal.value),
+    ExpenseCategory(id: 'c5', name: 'Кофе', iconCode: Icons.local_cafe.codePoint, colorValue: Colors.brown.value),
+    ExpenseCategory(id: 'c6', name: 'Досуг', iconCode: Icons.movie.codePoint, colorValue: Colors.pink.value),
   ];
 
-  final List<TransactionRecord> transactions = [];
+  List<TransactionRecord> transactions = [];
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
 
+  Future<void> _loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final wStr = prefs.getString('wallets');
+    final cStr = prefs.getString('categories');
+    final tStr = prefs.getString('transactions');
+
+    setState(() {
+      if (wStr != null) {
+        wallets = (json.decode(wStr) as List).map((e) => Wallet.fromJson(e)).toList();
+      }
+      if (cStr != null) {
+        categories = (json.decode(cStr) as List).map((e) => ExpenseCategory.fromJson(e)).toList();
+      }
+      if (tStr != null) {
+        transactions = (json.decode(tStr) as List).map((e) => TransactionRecord.fromJson(e)).toList();
+      }
+    });
+  }
+
+  Future<void> _saveData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('wallets', json.encode(wallets.map((e) => e.toJson()).toList()));
+    await prefs.setString('categories', json.encode(categories.map((e) => e.toJson()).toList()));
+    await prefs.setString('transactions', json.encode(transactions.map((e) => e.toJson()).toList()));
+  }
+
+  void _resetMonth() {
+    setState(() {
+      for (var c in categories) {
+        c.spent = 0.0;
+      }
+      transactions.clear();
+    });
+    _saveData();
+  }
   void _showAmountDialog(Wallet wallet, ExpenseCategory category) {
     final TextEditingController amountController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: Text('صرف من (${wallet.name}) إلى (${category.name})'),
-            content: TextField(
-              controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'أدخل المبلغ',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.attach_money),
-              ),
+        return AlertDialog(
+          title: Text('Расход: ${wallet.name} → ${category.name}'),
+          content: TextField(
+            controller: amountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Введите сумму (₽)',
+              border: OutlineInputBorder(),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('إلغاء'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final double? amount = double.tryParse(amountController.text);
-                  if (amount != null && amount > 0) {
-                    setState(() {
-                      wallet.balance -= amount;
-                      category.spent += amount;
-                      transactions.insert(
-                        0,
-                        TransactionRecord(
-                          walletName: wallet.name,
-                          categoryName: category.name,
-                          amount: amount,
-                          date: DateTime.now(),
-                        ),
-                      );
-                    });
-                    HapticFeedback.mediumImpact();
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('تأكيد'),
-              ),
-            ],
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+            FilledButton(
+              onPressed: () {
+                final double? amount = double.tryParse(amountController.text);
+                if (amount != null && amount > 0) {
+                  setState(() {
+                    wallet.balance -= amount;
+                    category.spent += amount;
+                    transactions.insert(
+                      0,
+                      TransactionRecord(
+                        walletName: wallet.name,
+                        categoryName: category.name,
+                        amount: amount,
+                        date: DateTime.now(),
+                      ),
+                    );
+                  });
+                  _saveData();
+                  HapticFeedback.mediumImpact();
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Подтвердить'),
+            ),
+          ],
         );
       },
     );
   }
 
+  void _showEditWalletDialog(Wallet wallet) {
+    final TextEditingController balanceCtrl = TextEditingController(text: wallet.balance.toStringAsFixed(0));
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Счет: ${wallet.name}'),
+          content: TextField(
+            controller: balanceCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Текущий баланс (₽)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+            FilledButton(
+              onPressed: () {
+                final double? newBal = double.tryParse(balanceCtrl.text);
+                if (newBal != null) {
+                  setState(() => wallet.balance = newBal);
+                  _saveData();
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Сохранить'),
+            ),
+          ],
+        );
+      },
+    );
+  }
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      body: _selectedIndex == 0
+          ? _buildHomeTab()
+          : StatsScreen(categories: categories, onResetMonth: _resetMonth),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (idx) => setState(() => _selectedIndex = idx),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.account_balance_wallet), label: 'Главная'),
+          NavigationDestination(icon: Icon(Icons.pie_chart), label: 'Статистика'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHomeTab() {
     double totalSpent = categories.fold(0, (sum, item) => sum + item.spent);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.grey.shade100,
-        appBar: AppBar(
-          title: const Text('مدير المصاريف الذكي', style: TextStyle(fontWeight: FontWeight.bold)),
-          centerTitle: true,
-          backgroundColor: Colors.white,
-          elevation: 0,
-        ),
-        body: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              color: Colors.white,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'اسحب المحفظة وأفلتها فوق المصروف:',
-                    style: TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: wallets.map((wallet) {
-                      return Draggable<Wallet>(
+    return Scaffold(
+      backgroundColor: Colors.grey.shade100,
+      appBar: AppBar(
+        title: const Text('Умный Бюджет', style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          const CurrencyRatesBar(),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+            color: Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Перетащите счет на категорию (нажмите для изменения баланса):',
+                  style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: wallets.map((wallet) {
+                    return GestureDetector(
+                      onTap: () => _showEditWalletDialog(wallet),
+                      child: Draggable<Wallet>(
                         data: wallet,
                         onDragStarted: () => HapticFeedback.lightImpact(),
                         feedback: Material(
                           color: Colors.transparent,
                           child: CoinWidget(wallet: wallet, isDragging: true),
                         ),
-                        childWhenDragging: Opacity(
-                          opacity: 0.3,
-                          child: CoinWidget(wallet: wallet),
-                        ),
+                        childWhenDragging: Opacity(opacity: 0.3, child: CoinWidget(wallet: wallet)),
                         child: CoinWidget(wallet: wallet),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
             ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-              color: Colors.teal.withOpacity(0.1),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('إجمالي مصاريف الشهر:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text(
-                    totalSpent.toStringAsFixed(0),
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal),
-                  ),
-                ],
-              ),
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            color: Colors.teal.withOpacity(0.1),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Расходы за месяц:', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  '${totalSpent.toStringAsFixed(0)} ₽',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.teal),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Padding(
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                childAspectRatio: 1.0,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemCount: categories.length,
+              itemBuilder: (context, index) {
+                final category = categories[index];
+                return DragTarget<Wallet>(
+                  onAcceptWithDetails: (details) => _showAmountDialog(details.data, category),
+                  builder: (context, candidateData, rejectedData) {
+                    return CategoryCard(category: category, isHovering: candidateData.isNotEmpty);
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 0.95,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                ),
-                itemCount: categories.length,
-                itemBuilder: (context, index) {
-                  final category = categories[index];
-                  return DragTarget<Wallet>(
-                    onAcceptWithDetails: (details) {
-                      _showAmountDialog(details.data, category);
-                    },
-                    builder: (context, candidateData, rejectedData) {
-                      return CategoryCard(
-                        category: category,
-                        isHovering: candidateData.isNotEmpty,
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('آخر العمليات:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: transactions.isEmpty
-                          ? const Center(
-                              child: Text('لا توجد مصاريف مسجلة بعد', style: TextStyle(color: Colors.grey)),
-                            )
-                          : ListView.builder(
-                              itemCount: transactions.length,
-                              itemBuilder: (context, index) {
-                                final tx = transactions[index];
-                                return Card(
-                                  elevation: 0,
-                                  color: Colors.white,
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: ListTile(
-                                    leading: const Icon(Icons.arrow_downward, color: Colors.redAccent),
-                                    title: Text('${tx.categoryName} (من ${tx.walletName})'),
-                                    trailing: Text(
-                                      '- ${tx.amount.toStringAsFixed(0)}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent),
-                                    ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Последние операции:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: transactions.isEmpty
+                        ? const Center(child: Text('Нет операций', style: TextStyle(color: Colors.grey)))
+                        : ListView.builder(
+                            itemCount: transactions.length,
+                            itemBuilder: (context, index) {
+                              final tx = transactions[index];
+                              return Card(
+                                elevation: 0,
+                                color: Colors.white,
+                                margin: const EdgeInsets.only(bottom: 6),
+                                child: ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.arrow_downward, color: Colors.redAccent, size: 18),
+                                  title: Text('${tx.categoryName} (${tx.walletName})'),
+                                  trailing: Text(
+                                    '- ${tx.amount.toStringAsFixed(0)} ₽',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent),
                                   ),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
