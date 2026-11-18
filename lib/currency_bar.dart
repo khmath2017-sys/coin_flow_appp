@@ -24,7 +24,6 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
   Future<String> _getUrl(String url) async {
     final client = HttpClient()
       ..badCertificateCallback = (cert, host, port) => true;
-
     final req = await client.getUrl(Uri.parse(url));
     req.headers.set('User-Agent', 'Mozilla/5.0');
     final res = await req.close();
@@ -33,7 +32,6 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
     if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
     return utf8.decode(bytes, allowMalformed: true);
   }
-
   Future<void> fetchCbrRates() async {
     setState(() {
       isLoading = true;
@@ -41,19 +39,16 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
     });
 
     try {
-final body = await _getUrl('https://cbr-xml-daily.ru' + '/daily_json.js');
-
+      final body = await _getUrl('https://cbr-xml-daily.ru' + '/daily_json.js');
       final data = json.decode(body);
       setState(() {
         usdRate = (data['Valute']['USD']['Value'] as num).toDouble();
         eurRate = (data['Valute']['EUR']['Value'] as num).toDouble();
         isLoading = false;
       });
-      return;
     } catch (e1) {
-      final body2 = await _getUrl('https://er-api.com' + '/v6/latest/USD');
-
-        final body2 = await _getUrl('https://er-api.com');
+      try {
+        final body2 = await _getUrl('https://er-api.com' + '/v6/latest/USD');
         final data2 = json.decode(body2);
         final rub = (data2['rates']['RUB'] as num).toDouble();
         final eur = (data2['rates']['EUR'] as num).toDouble();
@@ -62,7 +57,6 @@ final body = await _getUrl('https://cbr-xml-daily.ru' + '/daily_json.js');
           eurRate = rub / eur;
           isLoading = false;
         });
-        return;
       } catch (e2) {
         setState(() {
           errorText = e1.toString().replaceAll('Exception:', '').trim();
@@ -140,7 +134,6 @@ final body = await _getUrl('https://cbr-xml-daily.ru' + '/daily_json.js');
       },
     );
   }
-
   @override
   Widget build(BuildContext context) {
     return InkWell(
