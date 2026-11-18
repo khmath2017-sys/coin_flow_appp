@@ -23,8 +23,8 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
 
   Future<String> _getUrl(String url) async {
     final client = HttpClient()
-      ..badCertificateCallback = (cert, host, port) => true
-      ..connectionTimeout = const Duration(seconds: 7);
+      ..badCertificateCallback = (cert, host, port) => true;
+
     final req = await client.getUrl(Uri.parse(url));
     req.headers.set('User-Agent', 'Mozilla/5.0');
     final res = await req.close();
