@@ -27,14 +27,33 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
       hasError = false;
     });
 
-    try {
-      // الاتصال بمصدر البنك المركزي الروسي الرسمي أو المرآة الاحتياطية
-      final response = await http
-          .get(Uri.parse('https://cbr.ru'))
-          .timeout(const Duration(seconds: 8));
+    final headers = {'User-Agent': 'Mozilla/5.0 (Android 14; Mobile)'};
 
-      if (response.statusCode == 200) {
-        final body = latin1.decode(response.bodyBytes);
+    // المحاولة 1: المرآة السريعة للبنك المركزي الروسي
+    try {
+      final res = await http
+          .get(Uri.parse('https://cbr-xml-daily.ru'), headers: headers)
+          .timeout(const Duration(seconds: 6));
+
+      if (res.statusCode == 200) {
+        final data = json.decode(utf8.decode(res.bodyBytes));
+        setState(() {
+          usdRate = (data['Valute']['USD']['Value'] as num).toDouble();
+          eurRate = (data['Valute']['EUR']['Value'] as num).toDouble();
+          isLoading = false;
+        });
+        return;
+      }
+    } catch (_) {}
+
+    // المحاولة 2: الموقع الرسمي للبنك المركزي الروسي
+    try {
+      final res2 = await http
+          .get(Uri.parse('https://cbr.ru'), headers: headers)
+          .timeout(const Duration(seconds: 6));
+
+      if (res2.statusCode == 200) {
+        final body = latin1.decode(res2.bodyBytes);
         final usdMatch = RegExp(r'R01235.*?<Value>(.*?)</Value>', dotAll: true).firstMatch(body);
         final eurMatch = RegExp(r'R01239.*?<Value>(.*?)</Value>', dotAll: true).firstMatch(body);
 
@@ -47,13 +66,31 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
           return;
         }
       }
-      throw Exception('Failed');
-    } catch (e) {
-      setState(() {
-        hasError = true;
-        isLoading = false;
-      });
-    }
+    } catch (_) {}
+
+    // المحاولة 3: مصدر عالمي احتياطي مضمون
+    try {
+      final res3 = await http
+          .get(Uri.parse('https://er-api.com'), headers: headers)
+          .timeout(const Duration(seconds: 6));
+
+      if (res3.statusCode == 200) {
+        final data = json.decode(res3.body);
+        final rubPerUsd = (data['rates']['RUB'] as num).toDouble();
+        final eurPerUsd = (data['rates']['EUR'] as num).toDouble();
+        setState(() {
+          usdRate = rubPerUsd;
+          eurRate = rubPerUsd / eurPerUsd;
+          isLoading = false;
+        });
+        return;
+      }
+    } catch (_) {}
+
+    setState(() {
+      hasError = true;
+      isLoading = false;
+    });
   }
   void _showCalculatorDialog() {
     if (usdRate == null || eurRate == null) return;
