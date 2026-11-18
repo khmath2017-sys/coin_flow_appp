@@ -24,13 +24,27 @@ jobs:
         with:
           channel: 'stable'
 
+      - name: Prepare RuStore App Icon
+        run: |
+          pip install pillow
+          python3 -c '
+          from PIL import Image
+          img = Image.open("icon.png").convert("RGB")
+          w, h = img.size
+          crop = int(w * 0.04)
+          img = img.crop((crop, crop, w - crop, h - crop)).resize((512, 512), Image.LANCZOS)
+          img.save("icon.png", format="PNG", optimize=True)
+          '
+
       - name: Create Android project files
         run: |
           flutter create --platforms=android --org com.budget.expenses --project-name budget_expenses .
           python3 -c 'p="android/app/src/main/AndroidManifest.xml"; s=open(p).read(); s=s.replace("<application", "<uses-permission android:name=\"android.permission.INTERNET\"/>\n    <application", 1); s=s.replace("android:label=\"budget_expenses\"", "android:label=\"Бюджет и Расходы\""); open(p,"w").write(s)'
 
-      - name: Get dependencies
-        run: flutter pub get
+      - name: Get dependencies & Apply Icons
+        run: |
+          flutter pub get
+          dart run flutter_launcher_icons
 
       - name: Build APK
         run: flutter build apk --release --no-tree-shake-icons
@@ -38,5 +52,5 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CoinFlow-App-APK
+          name: Budget-Expenses-RU-APK
           path: build/app/outputs/flutter-apk/app-release.apk
