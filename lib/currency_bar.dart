@@ -41,7 +41,8 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
     });
 
     try {
-      final body = await _getUrl('https://cbr-xml-daily.ru');
+final body = await _getUrl('https://cbr-xml-daily.ru' + '/daily_json.js');
+
       final data = json.decode(body);
       setState(() {
         usdRate = (data['Valute']['USD']['Value'] as num).toDouble();
@@ -50,7 +51,8 @@ class _CurrencyRatesBarState extends State<CurrencyRatesBar> {
       });
       return;
     } catch (e1) {
-      try {
+      final body2 = await _getUrl('https://er-api.com' + '/v6/latest/USD');
+
         final body2 = await _getUrl('https://er-api.com');
         final data2 = json.decode(body2);
         final rub = (data2['rates']['RUB'] as num).toDouble();
