@@ -18,6 +18,7 @@ jobs:
 
       - name: Prepare RuStore Icon
         run: |
+          pip install pillow
           python3 -c '
           from PIL import Image
           img = Image.open("icon.png").convert("RGBA")
