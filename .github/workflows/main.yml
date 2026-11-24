@@ -1,0 +1,21 @@
+name: Generate Keystore
+
+on:
+workflow_dispatch:
+
+jobs:
+generate:
+runs-on: ubuntu-latest
+steps:
+- name: Create Keystore and Base64
+run: |
+keytool -genkey -v -keystore upload-keystore.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass 123456 -keypass 123456 -dname "CN=CoinFlow, OU=App, O=Dev, L=Moscow, S=Moscow, C=RU"
+base64 -w 0 upload-keystore.jks > keystore_base64.txt
+
+- name: Upload Keystore Backup
+uses: actions/upload-artifact@v4
+with:
+name: My-Signing-Key-BACKUP
+path: |
+upload-keystore.jks
+keystore_base64.txt
