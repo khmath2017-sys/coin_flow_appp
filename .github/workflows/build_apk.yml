@@ -1,56 +1,87 @@
-name: Build Flutter APK
+name: Собрать Flutter APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+      - uses: actions/checkout@v4
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Prepare RuStore App Icon
+      - name: Prepare RuStore Icon
         run: |
-          pip install pillow
           python3 -c '
           from PIL import Image
-          img = Image.open("icon.png").convert("RGB")
-          w, h = img.size
-          crop = int(w * 0.04)
-          img = img.crop((crop, crop, w - crop, h - crop)).resize((512, 512), Image.LANCZOS)
-          img.save("icon.png", format="PNG", optimize=True)
+          img = Image.open("icon.png").convert("RGBA")
+          bg = Image.new("RGB", img.size, (5, 40, 107))
+          bg.paste(img, (0, 0), img)
+          w, h = bg.size
+          crop_x, crop_y = int(w * 0.04), int(h * 0.04)
+          bg = bg.crop((crop_x, crop_y, w - crop_x, h - crop_y)).resize((w, h))
+          bg.save("icon.png")
           '
 
-      - name: Create Android project files
-        run: |
-          flutter create --platforms=android --org com.budget.expenses --project-name budget_expenses .
-          python3 -c 'p="android/app/src/main/AndroidManifest.xml"; s=open(p).read(); s=s.replace("<application", "<uses-permission android:name=\"android.permission.INTERNET\"/>\n    <application", 1); s=s.replace("android:label=\"budget_expenses\"", "android:label=\"Бюджет и Расходы\""); open(p,"w").write(s)'
+      - name: Create Android Project
+        run: flutter create --org com.coinflow.app --platforms android .
 
-      - name: Get dependencies & Apply Icons
+      - name: Install Dependencies and Icons
         run: |
           flutter pub get
           dart run flutter_launcher_icons
 
-      - name: Build APK
-        run: flutter build apk --release --no-tree-shake-icons
+      - name: Generate Signing Key
+        run: |
+          keytool -genkey -v -keystore android/app/upload-keystore.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass 123456 -keypass 123456 -dname "CN=CoinFlow, OU=App, O=Dev, L=Moscow, S=Moscow, C=RU"
+          python3 -c '
+          import glob
+          for f in glob.glob("android/app/build.gradle*"):
+              with open(f, "r") as file:
+                  content = file.read()
+              if f.endswith(".kts"):
+                  sign_cfg = """
+                  signingConfigs {
+                      create("release") {
+                          keyAlias = "upload"
+                          keyPassword = "123456"
+                          storeFile = file("upload-keystore.jks")
+                          storePassword = "123456"
+                      }
+                  }
+                  """
+                  content = content.replace("buildTypes {", sign_cfg + "\n    buildTypes {")
+                  content = content.replace("signingConfig = signingConfigs.getByName(\"debug\")", "signingConfig = signingConfigs.getByName(\"release\")")
+              else:
+                  sign_cfg = """
+                  signingConfigs {
+                      release {
+                          keyAlias "upload"
+                          keyPassword "123456"
+                          storeFile file("upload-keystore.jks")
+                          storePassword "123456"
+                      }
+                  }
+                  """
+                  content = content.replace("buildTypes {", sign_cfg + "\n    buildTypes {")
+                  content = content.replace("signingConfig signingConfigs.debug", "signingConfig signingConfigs.release")
+              with open(f, "w") as file:
+                  file.write(content)
+          '
 
-      - name: Upload APK artifact
+      - name: Build Signed APK
+        run: flutter build apk --release
+
+      - name: Upload Signed APK and Keystore
         uses: actions/upload-artifact@v4
         with:
-          name: Budget-Expenses-RU-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: RuStore-Ready-Package
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            android/app/upload-keystore.jks
